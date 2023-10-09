@@ -1,0 +1,135 @@
+name: 'script diff push'
+description: 'Run a script, show git diff and push changes if allowed'
+inputs:
+  github-token:
+    description: 'The token to authenticate with'
+  message_diff:
+    description: 'Message if there is a diff'
+    required: true
+  message_success:
+    description: 'Message if no more diff'
+    required: true
+  script_call:
+    description: 'Script call'
+    required: true
+  diff_file:
+    description: 'File to run diff on, full path within the git repo'
+    required: true
+  diff_path:
+    description: 'Diff file path within the repo'
+    required: true
+  git_diff_root:
+    description: 'Root path of the git diff'
+    required: true
+  git_user_name:
+    description: 'User name used for git push'
+    required: true
+  git_user_email:
+    description: 'User email used for git push'
+    required: true
+  reaction_emote:
+    description: 'Reaction to check by the PR author'
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: Execute ${{ inputs.script_call }}
+      working-directory: ${{ inputs.git_diff_root }}
+      run: ${{ inputs.script_call }}
+      shell: bash
+
+    - name: 'Upload Artifact: ${{ inputs.diff_file }}'
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ inputs.diff_file }}
+        path: ${{ inputs.git_diff_root }}/${{ inputs.diff_path }}/${{ inputs.diff_file }}
+
+    - name: Check for changes in ${{ inputs.diff_file }}
+      working-directory: ${{ inputs.git_diff_root }}
+      id: diff
+      shell: bash
+      run: |
+        DIFF=$(git diff HEAD \
+          --exit-code \
+          --ignore-space-change \
+          --ignore-all-space \
+          --ignore-blank-lines \
+          --ignore-cr-at-eol \
+          --ignore-space-at-eol) \
+          && true
+        echo "diff_result=$?" >> $GITHUB_OUTPUT
+        echo "$DIFF"
+        {
+          echo 'GITDIFF<<EOF'
+          echo "$DIFF"
+          echo EOF
+        } >> $GITHUB_ENV
+
+    - name: Post diff comment
+      uses: nordicbuilder/action-comment@main
+      id: comment
+      if: ${{ steps.diff.outputs.diff_result == 1 }}
+      env:
+        REACT_EMOTE: ${{ inputs.reaction_emote }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        reaction: "${{ env.REACT_EMOTE }}"
+        message: "${{ inputs.message_diff }}"
+
+    - name: Post success comment
+      uses: nordicbuilder/action-comment@main
+      env:
+        REACT_EMOTE: ${{ inputs.reaction_emote }}
+      if: ${{ steps.diff.outputs.diff_result == 0 }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        reaction: "${{ env.REACT_EMOTE }}"
+        message: "${{ inputs.message_success }}"
+
+    - name: Add changed file
+      working-directory: ${{ inputs.git_diff_root }}
+      if: ${{ steps.comment.outputs.found_reaction == 'True' && steps.diff.outputs.diff_result == 1 }}
+      shell: bash
+      run: |
+        git config user.email ${{ inputs.git_user_email }}
+        git config user.name  ${{ inputs.git_user_name }}
+        git add ${{ inputs.diff_path }}/${{ inputs.diff_file }}
+
+        echo -e '`${{ inputs.diff_file }}` has changed. Pushing to PR branch.' >> $GITHUB_STEP_SUMMARY
+        git commit -s -m "Updating ${{ inputs.diff_file }} with new fixed versions" \
+                      -m 'This is an automated commit from github workflow by NordicBuilder'
+        git push
+
+    - name: Post summary
+      if: ${{ !cancelled() }}
+      shell: bash
+      run: |
+        if [[ 1 == ${{ steps.diff.outputs.diff_result }} ]]; then
+          echo -e 'New ${{ inputs.diff_file }} file differs from the current file.' >> $GITHUB_STEP_SUMMARY
+        fi
+        if [[ -e ${{ inputs.git_diff_root }}/${{ inputs.diff_path }}/${{ inputs.diff_file }} ]]; then
+          echo -e '
+          <details>
+            <summary>${{ inputs.diff_file }}</summary>
+
+          ```' >> $GITHUB_STEP_SUMMARY
+          cat ${{ inputs.git_diff_root }}/${{ inputs.diff_path }}/${{ inputs.diff_file }} >> $GITHUB_STEP_SUMMARY
+          echo -e '```
+
+          </details>' >> $GITHUB_STEP_SUMMARY
+        else
+          echo -e 'Error during workflow, ${{ inputs.diff_file }} file was not created' >> GITHUB_STEP_SUMMARY
+        fi
+        if [[ -n $GITDIFF ]] && [[ 1 == ${{ steps.diff.outputs.diff_result}} ]]; then
+          echo -e '
+          <details>
+            <summary>${{ inputs.diff_file }} diff</summary>
+
+          ``` diff' >> $GITHUB_STEP_SUMMARY
+          echo "$GITDIFF" >> $GITHUB_STEP_SUMMARY
+          echo -e '```
+
+          </details>' >> $GITHUB_STEP_SUMMARY
+        fi
+
+        exit ${{ steps.diff.outputs.diff_result}}
