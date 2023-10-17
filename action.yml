@@ -91,12 +91,12 @@ runs:
       if: ${{ steps.comment.outputs.found_reaction == 'True' && steps.diff.outputs.diff_result == 1 }}
       shell: bash
       run: |
-        git config user.email ${{ inputs.git_user_email }}
-        git config user.name  ${{ inputs.git_user_name }}
+        git config user.email "\"${{ inputs.git_user_email }}\""
+        git config user.name "\"${{ inputs.git_user_name }}\""
         git add ${{ inputs.diff_path }}/${{ inputs.diff_file }}
 
         echo -e '`${{ inputs.diff_file }}` has changed. Pushing to PR branch.' >> $GITHUB_STEP_SUMMARY
-        git commit -s -m "Updating ${{ inputs.diff_file }} with new fixed versions" \
+        git commit -s -m "ci: Updating ${{ inputs.diff_file }}" \
                       -m 'This is an automated commit from github workflow by NordicBuilder'
         git push
 
