@@ -29,9 +29,6 @@
     # Path within the repo where the file to watch is present
     diff_path: ''
 
-    # The PR number to work on
-    git_target_pr: ''
-
     # The root folder for the git diff
     git_diff_root: ''
 
