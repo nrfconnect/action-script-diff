@@ -90,7 +90,10 @@ runs:
       working-directory: ${{ inputs.git_diff_root }}
       if: ${{ steps.comment.outputs.found_reaction == 'True' && steps.diff.outputs.diff_result == 1 }}
       shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
       run: |
+        gh pr checkout ${{ github.event.pull_request.number }}
         git config user.email "\"${{ inputs.git_user_email }}\""
         git config user.name "\"${{ inputs.git_user_name }}\""
         git add ${{ inputs.diff_path }}/${{ inputs.diff_file }}
@@ -99,11 +102,11 @@ runs:
         git config credential.helper store
         echo "https://x-access-token:${{ inputs.github-token }}@github.com" >> ~/.git-credentials
 
-        git checkout -b ${GITHUB_HEAD_REF}
         git commit -s -m "ci: Updating ${{ inputs.diff_file }}" \
                       -m 'This is an automated commit from github workflow by NordicBuilder'
-        git push origin ${GITHUB_HEAD_REF}
+        git push
         rm ~/.git-credentials
+        unset GH_TOKEN
 
     - name: Post summary
       if: ${{ !cancelled() }}
