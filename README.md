@@ -9,7 +9,7 @@
 ## Usage
 ``` yaml
 
-- uses: nordicbuilder/action-script-diff@v0.1
+- uses: nrfconnect/action-script-diff@v0.2
   with:
     # Token needed to post comments and add commits
     github-token: ''
