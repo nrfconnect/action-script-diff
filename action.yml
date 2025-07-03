@@ -35,21 +35,14 @@ runs:
       id: diff
       shell: bash
       run: |
-        DIFF=$(git diff HEAD \
+        git diff HEAD \
           --exit-code \
           --ignore-space-change \
           --ignore-all-space \
           --ignore-blank-lines \
           --ignore-cr-at-eol \
-          --ignore-space-at-eol) \
-          && true
-        echo "diff_result=$?" >> $GITHUB_OUTPUT
-        echo "$DIFF"
-        {
-          echo 'GITDIFF<<EOF'
-          echo "$DIFF"
-          echo EOF
-        } >> $GITHUB_ENV
+          --ignore-space-at-eol > diff_output.txt || true
+        echo "diff_result=$([[ -s diff_output.txt ]] && echo 1 || echo 0)" >> $GITHUB_OUTPUT
 
     - name: Post summary
       if: ${{ !cancelled() }}
@@ -71,13 +64,13 @@ runs:
         else
           echo -e 'Error during workflow, ${{ inputs.diff_file }} file was not created' >> $GITHUB_STEP_SUMMARY
         fi
-        if [[ -n $GITDIFF ]] && [[ 1 == ${{ steps.diff.outputs.diff_result}} ]]; then
+        if [[ -s diff_output.txt ]]; then
           echo -e '
           <details>
             <summary>${{ env.DIFF_FILE_NAME }} diff</summary>
 
           ``` diff' >> $GITHUB_STEP_SUMMARY
-          echo "$GITDIFF" >> $GITHUB_STEP_SUMMARY
+          cat diff_output.txt >> $GITHUB_STEP_SUMMARY
           echo -e '```
 
           </details>' >> $GITHUB_STEP_SUMMARY
